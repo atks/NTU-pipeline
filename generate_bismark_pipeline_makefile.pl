@@ -1,10 +1,3 @@
-1231232
-sdfasdfasf
-
-sdfsdf
-sdfsdf
-sdfsd
-efwefwe
 #!/usr/bin/perl -w
 
 use warnings;
@@ -40,11 +33,10 @@ This script generates the make file to discovery and genotype a set of individua
 
 my $help;
 
+my $sampleFile = "";
+ 
 my $outputDir;
-my $makeFile;
-my $partition;
 my $slurmScriptsSubDir = "";
-my $sampleFile;
 my $intervalWidth = 1000000;
 my $refGenomeFASTAFile;
 
@@ -54,7 +46,6 @@ Getopt::Long::Configure ('bundling');
 if(!GetOptions ('h'=>\$help,
                 'o:s'=>\$outputDir,
                 'm:s'=>\$makeFile,
-                'p:s'=>\$partition,
                 'd:s'=>\$slurmScriptsSubDir,
                 's:s'=>\$sampleFile,
                 'i:s'=>\$intervalWidth,
@@ -75,23 +66,19 @@ if(!GetOptions ('h'=>\$help,
 }
 
 #programs
-#you can set the  maximum memory here to be whatever you want
-my $samtools = "/net/fantasia/home/atks/dev/vt/comparisons/programs/samtools-1.3-20-gd49c73b/samtools";
-my $bcftools = "/net/fantasia/home/atks/dev/vt/comparisons/programs/bcftools-1.3-32-gafecb4e/bcftools";
-my $vt = "/net/fantasia/home/atks/dev/vt/comparisons/programs/vt/vt";
+my $bismark_genome_preparation = "/home/users/ntu/adrianta/programs/bismark-0.19.0/bismark_genome_preparation";
 
 printf("generate_bismarck_pipeline_makefile.pl\n");
 printf("\n");
 printf("options: output dir           %s\n", $outputDir);
 printf("         make file            %s\n", $makeFile);
-printf("         partition            %s\n", $partition);
 printf("         sample file          %s\n", $sampleFile);
 printf("         interval width       %s\n", $intervalWidth);
 printf("         reference            %s\n", $refGenomeFASTAFile);
 printf("\n");
 
 my $vcfOutDir = "$outputDir/vcf";
-mkpath($vcfOutDir);
+#mkpath($vcfOutDir);
 my $finalVCFOutDir = "$outputDir/final";
 mkpath($finalVCFOutDir);
 my $statsDir = "$outputDir/stats";
@@ -127,7 +114,7 @@ close(SA);
 exit;
 
 #$BISMARK_PATH/bismark_genome_preparation --path_to_bowtie $BOWTIE_PATH --verbose $GENOME_PATH
-
+#/home/users/ntu/adrianta/programs/bismark-0.19.0/bismark_genome_preparation --path_to_bowtie  /app/bowtie2/2.29 --verbose ~/ref/
 
 my $bamListFile = "$auxDir/bam.list";
 open(OUT,">$bamListFile") || die "Cannot open $bamListFile\n";
@@ -221,7 +208,7 @@ for my $i (0 .. $#intervals)
     $outputVCFFile = "$vcfOutDir/$intervalNames[$i].genotypes.vcf.gz";
     $tgt = "$outputVCFFile.OK";
     $dep = "";
-    @cmd = ("$samtools  mpileup -ugf $refGenomeFASTAFile -b $bamListFile -r $intervals[$i] | $bcftools call -vmO z -o $outputVCFFile"),
+    @cmd = ("mpileup -ugf $refGenomeFASTAFile -b $bamListFile -r $intervals[$i] |call -vmO z -o $outputVCFFile"),
     makeJob($partition, $tgt, $dep, @cmd);
 
     $intervalVCFFilesOK .= " $outputVCFFile.OK";
@@ -247,71 +234,10 @@ $dep = "$logDir/end.calling.OK";
 @cmd = ("date | awk '{print \"start concatenating and normalizing: \"\$\$0}' >> $logFile");
 makeLocalStep($tgt, $dep, @cmd);
 
-for my $chrom (@CHROM)
-{
-    my $vcfListFile = "$auxDir/$chrom.vcf.list";
-    open(OUT,">$vcfListFile") || die "Cannot open $vcfListFile\n";
-    for my $interval (@{$intervalsByChrom{$chrom}})
-    {
-        print OUT "$vcfOutDir/$interval.genotypes.vcf.gz\n";
-    }
-    close(OUT);
-    
-    #genotypes VCFs
-    $outputVCFFile = "$finalVCFOutDir/$chrom.genotypes.vcf.gz";
-    $tgt = "$outputVCFFile.OK";
-    $dep = "$logDir/end.calling.OK";
-    @cmd = ("$vt cat -L $vcfListFile -o + -w 1000 | $vt normalize + -o + -r $refGenomeFASTAFile 2> $statsDir/$chrom.normalize.log | $vt uniq + -o $outputVCFFile 2> $statsDir/$chrom.uniq.log");
-    makeJob($partition, $tgt, $dep, @cmd);
-
-    $inputVCFFile = "$finalVCFOutDir/$chrom.genotypes.vcf.gz";
-    $tgt = "$inputVCFFile.tbi.OK";
-    $dep = "$inputVCFFile.OK";
-    @cmd = ("$vt index $inputVCFFile");
-    makeJob($partition, $tgt, $dep, @cmd);
-
-    #sites VCFs
-    $inputVCFFile = "$finalVCFOutDir/$chrom.genotypes.vcf.gz";
-    $outputVCFFile = "$finalVCFOutDir/$chrom.sites.vcf.gz";
-    $tgt = "$outputVCFFile.OK";
-    $dep = "$inputVCFFile.OK";
-    @cmd = ("$vt view -s $inputVCFFile -o $outputVCFFile");
-    makeJob($partition, $tgt, $dep, @cmd);
-
-    $inputVCFFile = "$finalVCFOutDir/$chrom.sites.vcf.gz";
-    $tgt = "$inputVCFFile.tbi.OK";
-    $dep = "$inputVCFFile.OK";
-    @cmd = ("$vt index $inputVCFFile");
-    makeJob($partition, $tgt, $dep, @cmd);
-}
 
 my $inputVCFFiles = join(" ", map {"$finalVCFOutDir/$_.genotypes.vcf.gz"} @CHROM);
 my $inputVCFFilesOK = join(" ", map {"$finalVCFOutDir/$_.genotypes.vcf.gz.OK"} @CHROM);
-$outputVCFFile = "$finalVCFOutDir/all.genotypes.vcf.gz";
-$tgt = "$outputVCFFile.OK";
-$dep = $inputVCFFilesOK;
-@cmd = ("$vt cat $inputVCFFiles -o $outputVCFFile");
-makeJob($partition, $tgt, $dep, @cmd);
 
-$inputVCFFile = "$finalVCFOutDir/all.genotypes.vcf.gz";
-$tgt = "$inputVCFFile.tbi.OK";
-$dep = "$inputVCFFile.OK";
-@cmd = ("$vt index $inputVCFFile");
-makeJob($partition, $tgt, $dep, @cmd);
-
-$inputVCFFiles = join(" ", map {"$finalVCFOutDir/$_.sites.vcf.gz"} @CHROM);
-$inputVCFFilesOK = join(" ", map {"$finalVCFOutDir/$_.sites.vcf.gz.OK"} @CHROM);
-$outputVCFFile = "$finalVCFOutDir/all.sites.vcf.gz";
-$tgt = "$outputVCFFile.OK";
-$dep = $inputVCFFilesOK;
-@cmd = ("$vt cat $inputVCFFiles -o $outputVCFFile");
-makeJob($partition, $tgt, $dep, @cmd);
-
-$inputVCFFile = "$finalVCFOutDir/all.sites.vcf.gz";
-$tgt = "$inputVCFFile.tbi.OK";
-$dep = "$inputVCFFile.OK";
-@cmd = ("$vt index $inputVCFFile");
-makeJob($partition, $tgt, $dep, @cmd);
 
 #************
 #log end time

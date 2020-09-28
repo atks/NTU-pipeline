@@ -16,19 +16,45 @@ generate_file_integrity_checking_pipeline_makefile
 
  generate_file_integrity_checking_pipeline_makefile [options]
 
+  -h     help
   -d     directory containing files
   -e     type of file to compute md5 hash
   -c     file name of expected MD5 hashes with file names
   -o     output directory
+  -m     make file
+  
+  This script implements the pipeline for calculating md5sum.
+  1. A directory is specified as the input.
+  2. The input directory is searched for files that have to be checked.
+  3. The input directory is searched for files that contain the expected MD5 hashes 
+  4. A check is made to ensure that all the files have an expected md5 has to check against
+  5. MD5 hashes are computed for all the files
+  6. Comparisons are made between both sets of MD5 hashes.
+  7. The results are stored in the output directory
 
+  e.g. ./generate_file_integrity_checking_pipeline_makefile.pl 
+        -d /home/project/12000713/common/WGBS_2020/batch2 
+        -o /home/project/12000713/common/WGBS_2020/check_batch2 
+        -e fastq.gz 
+        -c md5sum_list.txt
+        
 =head1 DESCRIPTION
 
 This script implements the pipeline for calculating md5sum.
-1. A directory is input.
-2. The directory is searched for files that have to be checked.
-3. The directory is searched for files that contain the expected
-4. The results are stored in the output directory
+1. A directory is specified as the input.
+2. The input directory is searched for files that have to be checked.
+3. The input directory is searched for files that contain the expected MD5 hashes
+4. A check is made to ensure that all the files have an expected md5 has to check against
+5. MD5 hashes are computed for all the files
+6. Comparisons are made between both sets of MD5 hashes.
+7. The results are stored in the output directory
 
+e.g. ./generate_file_integrity_checking_pipeline_makefile.pl 
+        -d /home/project/12000713/common/WGBS_2020/batch2 
+        -o /home/project/12000713/common/WGBS_2020/check_batch2 
+        -e fastq.gz 
+        -c md5sum_list.txt
+        
 =cut
 
 my $help;
@@ -59,7 +85,7 @@ if(!GetOptions ('h'=>\$help,
     }
     else
     {
-        pod2usage(1);
+        pod2usage(1);      
     }
 }
 
@@ -163,10 +189,9 @@ makeLocalStep($tgt, $dep, @cmd);
 #########################
 #Compare old and new hash
 #########################
-my $outputFile = "$outputDir/computed_md5sum.txt";
 $tgt = "$outputDir/diff.OK";
 $dep = "$outputDir/computed_md5sum.txt.OK";
-@cmd = ("diff $outputDir/cßomputed_md5sum.txt $outputDir/expected_md5sum.txt > diff.log 2> diff.err");
+@cmd = ("diff $outputDir/cßomputed_md5sum.txt $outputDir/expected_md5sum.txt > $outputDir/diff.log 2> $outputDir/diff.err");
 makeLocalStep($tgt, $dep, @cmd);
 
 #*******************

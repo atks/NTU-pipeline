@@ -191,7 +191,7 @@ makeLocalStep($tgt, $dep, @cmd);
 #########################
 $tgt = "$outputDir/diff.OK";
 $dep = "$outputDir/computed_md5sum.txt.OK";
-@cmd = ("diff $outputDir/cßomputed_md5sum.txt $outputDir/expected_md5sum.txt > $outputDir/diff.log 2> $outputDir/diff.err");
+@cmd = ("diff $outputDir/computed_md5sum.txt $outputDir/expected_md5sum.txt > $outputDir/diff.log 2> $outputDir/diff.err");
 makeLocalStep($tgt, $dep, @cmd);
 
 #*******************

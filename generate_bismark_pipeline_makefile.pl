@@ -68,29 +68,170 @@ if(!GetOptions ('h'=>\$help,
 #programs
 my $bismark_genome_preparation = "/home/users/ntu/adrianta/programs/bismark-0.19.0/bismark_genome_preparation";
 
+#programs
+my $bismark_genome_preparation = "/home/users/ntu/adrianta/programs/bismark-0.19.0/bismark_genome_preparation";
+my $bowtie2 = "/app/bowtie2/2.29/bowtie2";
+my $samtools = "/app/samtools/1.3/bin/samtools";
+my $fastqc = "/home/users/ntu/adrianta/programs/fastqc-0.11.5/fastqc";
+
 printf("generate_bismarck_pipeline_makefile.pl\n");
 printf("\n");
 printf("options: output dir           %s\n", $outputDir);
 printf("         make file            %s\n", $makeFile);
 printf("         sample file          %s\n", $sampleFile);
 printf("         interval width       %s\n", $intervalWidth);
-printf("         reference            %s\n", $refGenomeFASTAFile);
+printf("         reference            %s\n", $refWholeSulfiteGenomeFASTAFile);
 printf("\n");
 
 my $vcfOutDir = "$outputDir/vcf";
 #mkpath($vcfOutDir);
 my $finalVCFOutDir = "$outputDir/final";
-mkpath($finalVCFOutDir);
+#mkpath($finalVCFOutDir);
 my $statsDir = "$outputDir/stats";
-mkpath($statsDir);
+#mkpath($statsDir);
 my $logDir = "$outputDir/log";
-mkpath($logDir);
+#mkpath($logDir);
 my $auxDir = "$outputDir/aux";
-mkpath($auxDir);
+#mkpath($auxDir);
 my $slurmScriptsDir = "$outputDir/slurm_scripts/$slurmScriptsSubDir";
-mkpath($slurmScriptsDir);
+#mkpath($slurmScriptsDir);
 my $slurmScriptNo = 0;
 my $logFile = "$outputDir/run.log";
+
+#this pipeline generator generates 2 makefiles
+my $preprocessMakeFile = 0;
+
+#################
+#Bisulfite Genome
+#################
+#not handled by this pipeline, partly because I wanted a specific path 
+#for it to be in which cannot be specified on the command line.  
+#/home/users/ntu/adrianta/ref/hg19/Bisulfite_Genome
+#$BISMARK_PATH/bismark_genome_preparation --path_to_bowtie $BOWTIE_PATH --verbose $GENOME_PATH
+
+#################
+#Read sample file 
+#################
+my %SAMPLE = ();
+my @SAMPLE = ();
+open(SA,"$sampleFile") || die "Cannot open $sampleFile\n";
+while (<SA>)
+{
+    s/\r?\n?$//;
+    if(!/^#/)
+    {
+        my ($sampleID, $fastq1Path, $fastq2Path) = split(/\s+/, $_);
+        
+        if (exists($SAMPLE{$sampleID}))
+        {
+            exit("$sampleID already exists. Please fix.");
+        }
+        
+        $SAMPLE{$sampleID}{FASTQ1} = $fastq1Path;
+        $SAMPLE{$sampleID}{FASTQ2} = $fastq2Path;
+        
+        push(@SAMPLE, $sampleID);
+    }
+}
+close(SA);
+
+################################################
+#Create/update/read augmented sample file
+#
+#a. lines_counted.OK exists and
+#   a. augmented.sa exists   
+#      a. age(lines_counted.OK) >  age(augmented.sa)    => overwrite
+#      b. age(lines_counted.OK) <= age(augmented.sa)    => read                       
+#   b. augmented.sa !exists                             => create     
+#b. lines_counted.OK !exists                            => skip
+#
+################################################
+my $augmentedSampleFile = "$outputDir/augmented.sa";
+my $linesCountedFile = "$outputDir/lines_counted.OK";
+
+my $lastTimeLinesCounted = `stat -t --printf="%Y" $linesCountedFile`;
+
+##read augmented sample file
+#if (-e $linesCountedFile)
+#{
+#    my $lastTimeLinesCounted = `stat -t --printf="%Y" $linesCountedFile`;
+#    my $createOrWriteAugmentedSampleFile = 0;
+#    
+#    if (-e $augmentedSampleFile)
+#    {
+#        my $lastTimeAugmentedSampleFileModified = `stat -t --printf="%Y" $augmentedSampleFile`;
+#        
+#        if ($lastTimeLinesCounted>$lastTimeAugmentedSampleFileModified)
+#        {
+#            $createOrWriteAugmentedSampleFile = 1;
+#        }
+#        else
+#        {
+#            #read augmented sample file
+#            open(SA,"$sampleFile") || die "Cannot open $sampleFile\n";
+#            while (<SA>)
+#            {
+#                s/\r?\n?$//;
+#                if(!/^#/)
+#                {
+#                    my ($sampleID, $fastq1Path, $fastq2Path, $noLines) = split(/\s+/, $_);
+#                    
+#                    if (exists($SAMPLE{$sampleID}))
+#                    {
+#                        $SAMPLE{$sampleID}{NO_LINES} = $noLines;
+#                    }
+#                    else
+#                    {
+#                        warn("$sampleID not in the sample file submitted. This sample is ignored.");
+#                    }
+#                }
+#            }
+#            close(SA);
+#        }
+#    }
+#    else
+#    {
+#        $createOrWriteAugmentedSampleFile = 1;
+#    }
+#    
+#    #create/overwrite augmented sample file
+#    if ($createOrWriteAugmentedSampleFile)
+#    {
+#        open(SA, ">$augmentedSampleFile") || die "Cannot open $augmentedSampleFile\n";
+#        for my $sampleID (@SAMPLE)
+#        {
+#            my $lines = `cat "$outputDir/samples/$sampleID/no_lines.txt"`;
+#            print SA "$sampleID\t$SAMPLE{$sampleID}{FASTQ1}\t$SAMPLE{$sampleID}{FASTQ2}\t$lines\n";
+#        }
+#        close(SA);  
+#    }
+#}
+
+##################################################################
+#count the samples that require their fastq file to be precounted.
+##################################################################
+my @SAMPLES_TO_COUNTLINES = ();
+for my $sampleID (@SAMPLE)
+{
+    print "$sampleID\n";
+    if (!exists($SAMPLE{$sampleID}{NO_LINES}))
+    {
+        push(@SAMPLES_TO_COUNTLINES, $sampleID);
+    }    
+}
+
+my $noFilesToBeCounted = scalar(@SAMPLES_TO_COUNTLINES);
+print "$noFilesToBeCounted samples to have their FASTQ files counted.\n";
+
+##########################
+#create sample directories
+##########################
+for my $sampleID (@SAMPLE)
+{
+    mkpath("$outputDir/samples/$sampleID");
+    mkpath("$outputDir/samples/$sampleID/fastqc_output");
+}
+
 
 ########################################
 #Read file locations and name of samples
@@ -190,9 +331,6 @@ my @cmd;
 my $inputVCFFile;
 my $outputVCFFile;
 
-########
-#Calling
-########
 
 #**************
 #log start time
@@ -213,6 +351,86 @@ for my $i (0 .. $#intervals)
 
     $intervalVCFFilesOK .= " $outputVCFFile.OK";
 }
+
+##################
+#Process by sample
+##################
+for my $sampleID (@SAMPLE)
+{
+    print "$sampleID\n";
+    if (!exists($SAMPLE{$sampleID}{NO_LINES}))
+    {
+        my $fastqcOutputDir = "$outputDir/samples/$sampleID/fastqc_output";
+        $tgt = "$fastqcOutputDir/fastqc1.OK";
+        $dep = "$SAMPLE{$sampleID}{FASTQ1}";
+        $log = "$fastqcOutputDir/fastqc1.log";
+        $err = "$fastqcOutputDir/fastqc1.err";
+        @cmd = ("$fastqc $SAMPLE{$sampleID}{FASTQ1} -o $fastqcOutputDir");
+        makePBSCommandLine($tgt, $dep, $log, $err, "03:00:00", @cmd);
+        $tgt = "$fastqcOutputDir/fastqc2.OK";
+        $dep = "$SAMPLE{$sampleID}{FASTQ2}";
+        $log = "$fastqcOutputDir/fastqc2.log";
+        $err = "$fastqcOutputDir/fastqc2.err";
+        @cmd = ("$fastqc $SAMPLE{$sampleID}{FASTQ2} -o $fastqcOutputDir");
+        makePBSCommandLine($tgt, $dep, $log, $err, "03:00:00", @cmd);
+        
+    }
+}
+
+
+#####################################################
+#Read files and count lines for augmented sample list
+#####################################################
+
+
+#####################################################
+#Read files and count lines for augmented sample list
+#####################################################
+#
+#my $noLinesOKFiles = "";
+#if ($noFilesToBeCounted!=0)
+#{
+#    for my $sampleID (@SAMPLES_TO_COUNTLINES)
+#    {
+#        my $sampleDir = "$outputDir/samples/$sampleID";
+#        my $fastqcOutputDir = "$sampleDir/fastqc_output";
+#        my $outputFile = "$fastqcOutputDir/no_lines.txt";
+#        $noLinesOKFiles .= "$fastqcOutputDir/no_lines.txt.OK ";
+#        $tgt = "$fastqcOutputDir/no_lines.txt.OK";
+#        $dep = "$SAMPLE{$sampleID}{FASTQ1}";
+#        @cmd = ("zcat $SAMPLE{$sampleID}{FASTQ1} | wc -l > $outputFile");
+#        makeLocalStep($tgt, $dep, @cmd);
+#    }
+#       
+#    $tgt = "$outputDir/lines_counted.OK";
+#    $dep = "$noLinesOKFiles";
+#    @cmd = ("echo $noFilesToBeCounted files counted.");
+#    makeLocalStep($tgt, $dep, @cmd);
+#    
+#    $makeFile = "$outputDir/count_lines.mk";
+#    print "Please run \"make -f count_lines.mk -j 8 -k\n";
+#
+#
+#    goto GENERATE_MAKEFILE;
+#}
+
+
+#$BISMARK_PATH/bismark_genome_preparation --path_to_bowtie $BOWTIE_PATH --verbose $GENOME_PATH
+#/home/users/ntu/adrianta/programs/bismark-0.19.0/bismark_genome_preparation --path_to_bowtie  /app/bowtie2/2.29 --verbose ~/ref/
+
+#my $bamListFile = "$auxDir/bam.list";
+#open(OUT,">$bamListFile") || die "Cannot open $bamListFile\n";
+#print OUT $bamFiles;
+#close(OUT);
+#
+#print "read in " . scalar(keys(%SAMPLE)) . " samples\n";
+
+#qsub -v LIB=$LIB $PBS_O_WORKDIR/processfastqc-raw.sh
+##########
+#Alignment
+##########
+
+#print "adding aligning steps\n";
 
 #************
 #log end time
@@ -284,35 +502,15 @@ sub makeJob
     }
 }
 
-#run slurm jobs
-sub makeSlurm
+#run PBS jobs
+sub makePBSCommandLine
 {
-    my ($partition, $tgt, $dep, @cmd) = @_;
-
+    my ($tgt, $dep, $log, $err, $walltime, @cmd) = @_;
     push(@tgts, $tgt);
     push(@deps, $dep);
     my $cmd = "";
-    for my $c (@cmd)
-    {
-        #contains pipe
-        if ($c=~/\|/)
-        {
-            ++$slurmScriptNo;
-            my $slurmScriptFile = "$slurmScriptsDir/$slurmScriptNo.sh";
-            open(IN, ">$slurmScriptFile");
-            print IN "#!/bin/bash\n";
-            print IN "set -o pipefail; $c";
-            close(IN);
-            chmod(0755, $slurmScriptFile);
-
-            $cmd .= "\techo '" . $c . "'\n";
-            $cmd .= "\tsrun -p $partition $slurmScriptFile\n";
-        }
-        else
-        {
-            $cmd .= "\tsrun -p $partition " . $c . "\n";
-        }
-    }
+    $cmd = "set -o pipefail;" . join(";", @cmd);
+    $cmd = "\techo \"$cmd\" | qsub -q normal -P 12000713 -W block=true -o $log -e $err -l select=1:ncpus=1,walltime=$walltime\n";
     $cmd .= "\ttouch $tgt\n";
     push(@cmds, $cmd);
 }

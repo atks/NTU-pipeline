@@ -27,7 +27,7 @@ generate_bismark_pipeline_makefile
 
 =head1 DESCRIPTION
 
-This script generates the make file to discovery and genotype a set of individuals.
+This script generates the make file to align bisulfite sequences.
 
 =cut
 
@@ -36,9 +36,8 @@ my $help;
 my $sampleFile = "";
  
 my $outputDir;
-my $slurmScriptsSubDir = "";
-my $intervalWidth = 1000000;
 my $refGenomeFASTAFile;
+my $makeFile;
 
 #initialize options
 Getopt::Long::Configure ('bundling');
@@ -67,9 +66,6 @@ if(!GetOptions ('h'=>\$help,
 
 #programs
 my $bismark_genome_preparation = "/home/users/ntu/adrianta/programs/bismark-0.19.0/bismark_genome_preparation";
-
-#programs
-my $bismark_genome_preparation = "/home/users/ntu/adrianta/programs/bismark-0.19.0/bismark_genome_preparation";
 my $bowtie2 = "/app/bowtie2/2.29/bowtie2";
 my $samtools = "/app/samtools/1.3/bin/samtools";
 my $fastqc = "/home/users/ntu/adrianta/programs/fastqc-0.11.5/fastqc";
@@ -93,9 +89,6 @@ my $logDir = "$outputDir/log";
 #mkpath($logDir);
 my $auxDir = "$outputDir/aux";
 #mkpath($auxDir);
-my $slurmScriptsDir = "$outputDir/slurm_scripts/$slurmScriptsSubDir";
-#mkpath($slurmScriptsDir);
-my $slurmScriptNo = 0;
 my $logFile = "$outputDir/run.log";
 
 #this pipeline generator generates 2 makefiles
@@ -330,7 +323,8 @@ my $dep;
 my @cmd;
 my $inputVCFFile;
 my $outputVCFFile;
-
+my $log;
+my $err;
 
 #**************
 #log start time
@@ -376,12 +370,6 @@ for my $sampleID (@SAMPLE)
         
     }
 }
-
-
-
-#####################################################
-#Read files and count lines for augmented sample list
-#####################################################
 
 
 #####################################################

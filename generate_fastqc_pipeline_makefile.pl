@@ -34,13 +34,11 @@ This script implements the pipeline for Whole Genome Bisulfite Sequencing using 
 my $help;
 
 my $sampleFile;
-my $outputDir = "/home/users/ntu/adrianta/12000713/20200915_wgbs";
-#my $outputDir = "/home/users/ntu/adrianta/12000713/20200807_wgbs_pilot";
-my $splitLineNo = 40000000;
-#my $splitLineNo = 2000000;
-#my $makeFile = "$outputDir/temp_run_pipeline.mk";
-my $makeFile = "$outputDir/run_pipeline.mk";
-my $refWholeSulfiteGenomeFASTAFile = "/home/users/ntu/adrianta/ref/hg19/Bisulfite_Genome";
+my $outputDir;
+my $splitLineNo;
+my $makeFile;
+my $refGenomeDir;
+my $qsubJobName;
 
 #initialize options
 Getopt::Long::Configure ('bundling');
@@ -49,11 +47,15 @@ if(!GetOptions ('h'=>\$help,
                 'o=s'=>\$outputDir,
                 's=s'=>\$sampleFile,
                 'd=i'=>\$splitLineNo,
+                'n:s'=>\$qsubJobName,
                 'm:s'=>\$makeFile,
-                'r:s'=>\$refWholeSulfiteGenomeFASTAFile
+                'r:s'=>\$refGenomeDir
                )
+  || !defined($outputDir)
+  || !defined($splitLineNo)
   || !defined($sampleFile)
-  || !defined($refWholeSulfiteGenomeFASTAFile))
+  || !defined($makeFile)
+  || !defined($refGenomeDir))
 {
     if ($help)
     {
@@ -65,15 +67,19 @@ if(!GetOptions ('h'=>\$help,
     }
 }
 
+$makeFile = "$outputDir/run_pipeline.mk";
+
 #programs
 my $bismark_genome_preparation = "/home/users/ntu/adrianta/programs/bismark-0.19.0/bismark_genome_preparation";
 my $bowtie2 = "/app/bowtie2/2.29/bowtie2";
+my $bowtie2Path = "/app/bowtie2/2.29";
 my $samtools = "/app/samtools/1.3/bin/samtools";
 my $fastqc = "/home/users/ntu/adrianta/programs/fastqc-0.11.5/fastqc";
 my $trimGalore = "/home/users/ntu/adrianta/programs/trimGalore-0.4.5/trim_galore";
 my $cutAdaptPath = "/home/users/ntu/adrianta/programs/cutadapt-1.15";
 my $cutAdapt = "/home/users/ntu/adrianta/programs/cutadapt-1.15/cutadapt";
 my $zsplit = "/home/users/ntu/adrianta/programs/NTU-pipeline/zsplit.pl";
+my $bismarck = "/home/users/ntu/adrianta/programs/programs/bismark-0.19.0";
 
 printf("generate_bismarck_pipeline_makefile.pl\n");
 printf("\n");
@@ -254,7 +260,7 @@ print "$noFilesToBeCounted" . "/" . scalar(@SAMPLE) . " samples to have their FA
 ############################
 my $noLinesOKFiles = "";
 if ($noFilesToBeCounted)
-{
+{ 
     for my $sampleID (@SAMPLES_TO_COUNTLINES)
     {
         my $sampleDir = "$outputDir/samples/$sampleID";
@@ -286,6 +292,23 @@ print "generate commands for trim galore\n";
 
 for my $sampleID (@SAMPLE)
 {
+    #######
+    #fastQC
+    #######
+    my $fastqcOutputDir = "$outputDir/samples/$sampleID/fastqc_output";
+    $tgt = "$fastqcOutputDir/fastqc1.OK";
+    $dep = "$SAMPLE{$sampleID}{FASTQ1}";
+    $log = "$fastqcOutputDir/fastqc1.log";
+    $err = "$fastqcOutputDir/fastqc1.err";
+    @cmd = ("$fastqc $SAMPLE{$sampleID}{FASTQ1} -o $fastqcOutputDir");
+    makePBSCommandLine($tgt, $dep, $log, $err, "24:00:00", @cmd);
+    $tgt = "$fastqcOutputDir/fastqc2.OK";
+    $dep = "$SAMPLE{$sampleID}{FASTQ2}";
+    $log = "$fastqcOutputDir/fastqc2.log";
+    $err = "$fastqcOutputDir/fastqc2.err";
+    @cmd = ("$fastqc $SAMPLE{$sampleID}{FASTQ2} -o $fastqcOutputDir");
+    makePBSCommandLine($tgt, $dep, $log, $err, "24:00:00", @cmd);
+    
     ###########
     #trimgalore
     ###########
@@ -316,6 +339,9 @@ for my $sampleID (@SAMPLE)
 #        print "     : $trimmedR1File\n";
 #        print "     : $trimmedR2File\n";
         
+        ##############
+        #trimmed reads
+        ##############
         $splitTrimmedR1FASTQFiles .= $i==0 ? "$trimmedR1File" : " $trimmedR1File";
         $splitTrimmedR2FASTQFiles .= $i==0 ? "$trimmedR2File" : " $trimmedR2File";
         $dep = "$splitDir/split.OK";
@@ -326,6 +352,37 @@ for my $sampleID (@SAMPLE)
                             "--keep --illumina --clip_R2 18 --three_prime_clip_R1 18 --phred33 " .
                             "--paired $R1File $R2File");
         makePBSCommandLine($tgt, $dep, $log, $err, "24:00:00", @cmd);
+        
+        
+        ####################
+        #align trimmed reads
+        ####################
+        $tgt = "$alignedOutputDir/.OK";
+        $dep = "$trimGaloreOutputDir/trim_galore.OK";
+        $log = "$alignedOutputDir/aligned.log";
+        $err = "$alignedOutputDir/aligned.err";
+        @cmd = ("$bismark --bowtie -p 4 --bam " . 
+                    "--temp_dir $tempDir --un --ambiguous " . 
+                    "--score_min L,0,-0.2 " .
+                    "--path_to_bowtie $bowtie2Path " .
+                    "-o $alignedOutputDir " . 
+                    "--genome_folder $genomeRefPath " .
+                    "$trimmedR2File -o $fastqcOutputDir");
+        makePBSCommandLine($tgt, $dep, $log, $err, "24:00:00", @cmd);    
+        
+    
+#    ### Run bismark alignment on paired-end trimmed fastqs (read_1 & read_2) using bowtie-2:
+#    $BISMARK_PATH/bismark --bowtie2 
+#    -p 4 --bam 
+#    --temp_dir $TEMP_DIR 
+#    --un 
+#    --ambiguous 
+#    --score_min L,0,-0.2 
+#    --path_to_bowtie $BOWTIE_PATH/ 
+#    -o $BAM_OUTPUT_DIR 
+#    --genome_folder $GENOME_PATH 
+#    -1 $TRIMMED_R1 -2 $TRIMMED_R2
+        
     }
 
     ##########################
@@ -364,65 +421,30 @@ for my $sampleID (@SAMPLE)
     $log = "$fastqcOutputDir/fastqc2.log";
     $err = "$fastqcOutputDir/fastqc2.err";
     @cmd = ("$fastqc $trimmedR2File -o $fastqcOutputDir");
-    makePBSCommandLine($tgt, $dep, $log, $err, "24:00:00", @cmd);
+    makePBSCommandLine($tgt, $dep, $log, $err, "24:00:00", @cmd);    
 }
-
-
 
 goto GENERATE_MAKEFILE;
 
-#######
-#fastQC
-#######
-for my $sampleID (@SAMPLE)
-{
-#    print "$sampleID\n";
-    if (!exists($SAMPLE{$sampleID}{NO_LINES}))
-    {
-        my $fastqcOutputDir = "$outputDir/samples/$sampleID/fastqc_output";
-        $tgt = "$fastqcOutputDir/fastqc1.OK";
-        $dep = "$SAMPLE{$sampleID}{FASTQ1}";
-        $log = "$fastqcOutputDir/fastqc1.log";
-        $err = "$fastqcOutputDir/fastqc1.err";
-        @cmd = ("$fastqc $SAMPLE{$sampleID}{FASTQ1} -o $fastqcOutputDir");
-        makePBSCommandLine($tgt, $dep, $log, $err, "03:00:00", @cmd);
-        $tgt = "$fastqcOutputDir/fastqc2.OK";
-        $dep = "$SAMPLE{$sampleID}{FASTQ2}";
-        $log = "$fastqcOutputDir/fastqc2.log";
-        $err = "$fastqcOutputDir/fastqc2.err";
-        @cmd = ("$fastqc $SAMPLE{$sampleID}{FASTQ2} -o $fastqcOutputDir");
-        makePBSCommandLine($tgt, $dep, $log, $err, "03:00:00", @cmd);
-        
-    }
-}
-
-##################
-#trimgalore
-##################
-for my $sampleID (@SAMPLE)
-{
-    if (!exists($SAMPLE{$sampleID}{NO_LINES}))
-    {
-        my $trimGaloreOutputDir = "$outputDir/samples/$sampleID/trim_galore_output";
-        $tgt = "$trimGaloreOutputDir/trim_galore.OK";
-        $dep = "$SAMPLE{$sampleID}{FASTQ1} $SAMPLE{$sampleID}{FASTQ2}";
-        $log = "$trimGaloreOutputDir/trimgalore.log";
-        $err = "$trimGaloreOutputDir/trimgalore.err";
-        @cmd = ("$trimGalore -o $trimGaloreOutputDir " .
-                            "--path_to_cutadapt $cutAdapt " .
-                            "--illumina --clip_R2 18 --three_prime_clip_R1 18 --phred33 " .
-                            "--paired $SAMPLE{$sampleID}{FASTQ1} $SAMPLE{$sampleID}{FASTQ2}");
-        makePBSCommandLine($tgt, $dep, $log, $err, "48:00:00", @cmd);
-    }
-}
-
-
-#####################################################
-#Read files and count lines for augmented sample list
-#####################################################
-
-
-
+###################
+##trimgalore
+###################
+#for my $sampleID (@SAMPLE)
+#{
+#    if (!exists($SAMPLE{$sampleID}{NO_LINES}))
+#    {
+#        my $trimGaloreOutputDir = "$outputDir/samples/$sampleID/trim_galore_output";
+#        $tgt = "$trimGaloreOutputDir/trim_galore.OK";
+#        $dep = "$SAMPLE{$sampleID}{FASTQ1} $SAMPLE{$sampleID}{FASTQ2}";
+#        $log = "$trimGaloreOutputDir/trimgalore.log";
+#        $err = "$trimGaloreOutputDir/trimgalore.err";
+#        @cmd = ("$trimGalore -o $trimGaloreOutputDir " .
+#                            "--path_to_cutadapt $cutAdapt " .
+#                            "--illumina --clip_R2 18 --three_prime_clip_R1 18 --phred33 " .
+#                            "--paired $SAMPLE{$sampleID}{FASTQ1} $SAMPLE{$sampleID}{FASTQ2}");
+#        makePBSCommandLine($tgt, $dep, $log, $err, "48:00:00", @cmd);
+#    }
+#}
 
 
 #$BISMARK_PATH/bismark_genome_preparation --path_to_bowtie $BOWTIE_PATH --verbose $GENOME_PATH
@@ -451,10 +473,6 @@ for my $sampleID (@SAMPLE)
 #makeLocalStep($tgt, $dep, @cmd);
 #
 
-
-###################
-#Generate intervals
-###################
 
 
 #************
@@ -543,7 +561,18 @@ sub makePBSCommandLine
     push(@cmds, $cmd);
 }
 
-#echo "zcat /home/projects/12000713/common/WGBS_pilot_2018/Novogene_Novaseq/EAL011_Novo_Nova_Swiftbio_indexed_R1.fastq.gz  | wc -l" |
+#run PBS jobs
+sub makeNamedPBSCommandLine
+{
+    my ($tgt, $dep, $log, $err, $walltime, $qsubJobName, @cmd) = @_;
+    push(@tgts, $tgt);
+    push(@deps, $dep);
+    my $cmd = "";
+    $cmd = "set -o pipefail;" . join(";", @cmd);
+    $cmd = "\techo \"$cmd\" | qsub -q normal -P 12000713 -W block=true -N qsubJobName -o $log -e $err -l select=1:ncpus=1,walltime=$walltime\n";
+    $cmd .= "\ttouch $tgt\n";
+    push(@cmds, $cmd);
+}
 
 sub makeLocalStep
 {
@@ -559,5 +588,3 @@ sub makeLocalStep
     $cmd .= "\ttouch $tgt\n";
     push(@cmds, $cmd);
 }
-
-

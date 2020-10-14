@@ -10,7 +10,7 @@ use Pod::Usage;
 
 =head1 NAME
 
-generate_bismark_pipeline_makefile
+generate_fastqc_pipeline_makefile
 
 =head1 SYNOPSIS
 
@@ -68,7 +68,7 @@ if(!GetOptions ('h'=>\$help,
     }
 }
 
-$makeFile = "$outputDir/run_pipeline.mk";
+$makeFile = "$outputDir/$makeFile";
 
 #programs
 my $bismark_genome_preparation = "/home/users/ntu/adrianta/programs/bismark-0.19.0/bismark_genome_preparation";
@@ -83,7 +83,7 @@ my $zsplit = "/home/users/ntu/adrianta/programs/NTU-pipeline/zsplit.pl";
 my $bismark = "/home/users/ntu/adrianta/programs/bismark-0.19.0/bismark";
 my $bismarkPath = "/home/users/ntu/adrianta/programs/bismark-0.19.0";
 
-printf("generate_bismarck_pipeline_makefile.pl\n");
+printf("generate_fastqc_pipeline_makefile.pl\n");
 printf("\n");
 printf("options: output dir           %s\n", $outputDir);
 printf("         make file            %s\n", $makeFile);
@@ -91,9 +91,6 @@ printf("         split line no        %s\n", $splitLineNo);
 printf("         sample file          %s\n", $sampleFile);
 printf("         reference            %s\n", $refGenomeDir);
 printf("\n");
-
-#this pipeline generator generates 2 makefiles
-my $preprocessMakeFile = 0;
 
 ################################################
 #Helper data structures for generating make file
@@ -248,6 +245,9 @@ for my $sampleID (@SAMPLE)
     my $splitTrimmedAlignedBAMFiles = "";
     for my $i (1 .. $noFile)
     {
+        ##############
+        #trimmed reads
+        ##############        
         my $splitDir = "$outputDir/samples/$sampleID/split";
         my $trimGaloreOutputDir = "$outputDir/samples/$sampleID/trim_galore_output/$i";
         mkpath("$trimGaloreOutputDir");
@@ -260,10 +260,7 @@ for my $sampleID (@SAMPLE)
         
         my $trimmedR1File = "$trimGaloreOutputDir/$i" . "_$file1" . "_val_1.fq.gz";
         my $trimmedR2File = "$trimGaloreOutputDir/$i" . "_$file2" . "_val_2.fq.gz";
-        
-        ##############
-        #trimmed reads
-        ##############
+
         $splitTrimmedR1FASTQFiles .= $i==0 ? "$trimmedR1File" : " $trimmedR1File";
         $splitTrimmedR2FASTQFiles .= $i==0 ? "$trimmedR2File" : " $trimmedR2File";
         $dep = "$splitDir/split.OK";
@@ -278,93 +275,93 @@ for my $sampleID (@SAMPLE)
         ####################
         #align trimmed reads
         ####################
-        my $alignedOutputDir = "$outputDir/samples/$sampleID/aligned/$i";
-        my $tempAlignedOutputDir = "$alignedOutputDir/temp";
-        $tgt = "$alignedOutputDir/aligned.OK";
-        $splitTrimmedAlignedOKFiles .= $i==0 ? "$alignedOutputDir/aligned.OK" : " $alignedOutputDir/aligned.OK";
-        
-        my ($file, $dir, $suffix) = fileparse($trimmedR1File, (".fq.gz"));
-        my $bamFile = $alignedOutputDir . "/" . $file . "_bismark_bt2_pe.bam";
-        
-#        print "BAM: $bamFile  \n";
-#        13_JC1_Macr_Nova_Swiftbio_indexed_R1_val_1_bismark_bt2_pe.bam
-#        /home/users/ntu/adrianta/12000713/20200807_wgbs_pilot/samples/JC1/trim_galore_output/13/
-#        13_JC1_Macr_Nova_Swiftbio_indexed_R1_val_1.fq.gz
-        $splitTrimmedAlignedBAMFiles .= $i==0 ? "$bamFile" : " $bamFile";
-   
-        $dep = "$trimGaloreOutputDir/trim_galore.OK";
-        $log = "$alignedOutputDir/aligned.log";
-        $err = "$alignedOutputDir/aligned.err";
-        @cmd = ("$bismark --bowtie2 -p 4 --bam " . 
-                    "--temp_dir $tempAlignedOutputDir --un --ambiguous " . 
-                    "--score_min L,0,-0.2 " .
-                    "--path_to_bowtie $bowtie2Path " .
-                    "-o $alignedOutputDir " . 
-                    "--genome_folder $refGenomeDir " .
-                    "-1 $trimmedR1File -2 $trimmedR2File");
-        makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);    
+#        my $alignedOutputDir = "$outputDir/samples/$sampleID/aligned/$i";
+#        my $tempAlignedOutputDir = "$alignedOutputDir/temp";
+#        $tgt = "$alignedOutputDir/aligned.OK";
+#        $splitTrimmedAlignedOKFiles .= $i==0 ? "$alignedOutputDir/aligned.OK" : " $alignedOutputDir/aligned.OK";
+#        
+#        my ($file, $dir, $suffix) = fileparse($trimmedR1File, (".fq.gz"));
+#        my $bamFile = $alignedOutputDir . "/" . $file . "_bismark_bt2_pe.bam";
+#        
+##        print "BAM: $bamFile  \n";
+##        13_JC1_Macr_Nova_Swiftbio_indexed_R1_val_1_bismark_bt2_pe.bam
+##        /home/users/ntu/adrianta/12000713/20200807_wgbs_pilot/samples/JC1/trim_galore_output/13/
+##        13_JC1_Macr_Nova_Swiftbio_indexed_R1_val_1.fq.gz
+#        $splitTrimmedAlignedBAMFiles .= $i==0 ? "$bamFile" : " $bamFile";
+#   
+#        $dep = "$trimGaloreOutputDir/trim_galore.OK";
+#        $log = "$alignedOutputDir/aligned.log";
+#        $err = "$alignedOutputDir/aligned.err";
+#        @cmd = ("$bismark --bowtie2 -p 4 --bam " . 
+#                    "--temp_dir $tempAlignedOutputDir --un --ambiguous " . 
+#                    "--score_min L,0,-0.2 " .
+#                    "--path_to_bowtie $bowtie2Path " .
+#                    "-o $alignedOutputDir " . 
+#                    "--genome_folder $refGenomeDir " .
+#                    "-1 $trimmedR1File -2 $trimmedR2File");
+#        makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);    
         
         
     }
 
-    ######################
-    #combined aligned bams
-    ######################
-    my $alignedOutputDir = "$outputDir/samples/$sampleID/aligned";
-    my $outputBamFile = "$alignedOutputDir/$sampleID.name_sorted.bam";  
-    $tgt = "$outputBamFile.OK";
-    $dep = $splitTrimmedAlignedOKFiles;
-    $log = "$alignedOutputDir/merge_name_sorted.log";
-    $err = "$alignedOutputDir/merge_name_sorted.err";
-    @cmd = ("$samtools merge -nf $outputBamFile $splitTrimmedAlignedBAMFiles");
-    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);
+#    ######################
+#    #combined aligned bams
+#    ######################
+#    my $alignedOutputDir = "$outputDir/samples/$sampleID/aligned";
+#    my $outputBamFile = "$alignedOutputDir/$sampleID.name_sorted.bam";  
+#    $tgt = "$outputBamFile.OK";
+#    $dep = $splitTrimmedAlignedOKFiles;
+#    $log = "$alignedOutputDir/merge_name_sorted.log";
+#    $err = "$alignedOutputDir/merge_name_sorted.err";
+#    @cmd = ("$samtools merge -nf $outputBamFile $splitTrimmedAlignedBAMFiles");
+#    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);
 
-    ############
-    #deduplicate
-    ############
-    my $dedupOutputDir = "$outputDir/samples/$sampleID/dedup";
-    my $inputBAMFile = "$outputDir/samples/$sampleID/aligned/$sampleID.name_sorted.bam";  
-    $tgt = "$dedupOutputDir/dedup.OK";
-    $dep = "$inputBAMFile.OK";
-    $log = "$dedupOutputDir/dedup.log";
-    $err = "$dedupOutputDir/dedup.err";
-    @cmd = ("$bismarkPath/deduplicate_bismark -p --bam $inputBAMFile --output_dir $dedupOutputDir");
-    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);
+#    ############
+#    #deduplicate
+#    ############
+#    my $dedupOutputDir = "$outputDir/samples/$sampleID/dedup";
+#    my $inputBAMFile = "$outputDir/samples/$sampleID/aligned/$sampleID.name_sorted.bam";  
+#    $tgt = "$dedupOutputDir/dedup.OK";
+#    $dep = "$inputBAMFile.OK";
+#    $log = "$dedupOutputDir/dedup.log";
+#    $err = "$dedupOutputDir/dedup.err";
+#    @cmd = ("$bismarkPath/deduplicate_bismark -p --bam $inputBAMFile --output_dir $dedupOutputDir");
+#    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);
      
-    ####################
-    #extract methylation
-    ####################    
-    my $methylationOutputDir = "$outputDir/samples/$sampleID/methylation";
-    $inputBAMFile = "$outputDir/samples/$sampleID/dedup/$sampleID.name_sorted.deduplicated.bam";  
-    $tgt = "$methylationOutputDir/methylation.OK";
-    $dep = "$outputDir/samples/$sampleID/dedup/dedup.OK";
-    $log = "$methylationOutputDir/methylation.log";
-    $err = "$methylationOutputDir/methylation.err";
-    @cmd = ("$bismarkPath/bismark_methylation_extractor " .
-             "-p --multicore 4 --no_overlap " . 
-             "-o $methylationOutputDir " . 
-             "--comprehensive --merge_non_CpG " . 
-             "--cutoff 1 --buffer_size 40G --zero_based --cytosine_report " .
-             "--genome_folder $refGenomeDir " .
-             "$inputBAMFile");
-    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 4, "96G", @cmd);
- 	#$BISMARK_PATH/bismark_methylation_extractor 
- 	#-p --multicore 4 --no_overlap 
- 	#-o $METH_OUTPUT_DIR --comprehensive --merge_non_CpG 
- 	#--cutoff 1 --buffer_size 40G --zero_based --cytosine_report --genome_folder $GENOME_PATH $bam_file
- 
-    #########
-    #sort bam
-    #########
-    my $sortedBAMOutputDir = "$outputDir/samples/$sampleID/sorted";
-    $inputBAMFile = "$outputDir/samples/$sampleID/dedup/$sampleID.name_sorted.deduplicated.bam";  
-    my $outputBAMFile = "$sortedBAMOutputDir/$sampleID.bam";  
-    $tgt = "$sortedBAMOutputDir/sorted.OK";
-    $dep = "$outputDir/samples/$sampleID/dedup/dedup.OK";
-    $log = "$sortedBAMOutputDir/sorted.log";
-    $err = "$sortedBAMOutputDir/sorted.err";
-    @cmd = ("$samtools sort $inputBAMFile -o $outputBAMFile");
-    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);
+#    ####################
+#    #extract methylation
+#    ####################    
+#    my $methylationOutputDir = "$outputDir/samples/$sampleID/methylation";
+#    $inputBAMFile = "$outputDir/samples/$sampleID/dedup/$sampleID.name_sorted.deduplicated.bam";  
+#    $tgt = "$methylationOutputDir/methylation.OK";
+#    $dep = "$outputDir/samples/$sampleID/dedup/dedup.OK";
+#    $log = "$methylationOutputDir/methylation.log";
+#    $err = "$methylationOutputDir/methylation.err";
+#    @cmd = ("$bismarkPath/bismark_methylation_extractor " .
+#             "-p --multicore 4 --no_overlap " . 
+#             "-o $methylationOutputDir " . 
+#             "--comprehensive --merge_non_CpG " . 
+#             "--cutoff 1 --buffer_size 40G --zero_based --cytosine_report " .
+#             "--genome_folder $refGenomeDir " .
+#             "$inputBAMFile");
+#    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 4, "96G", @cmd);
+# 	#$BISMARK_PATH/bismark_methylation_extractor 
+# 	#-p --multicore 4 --no_overlap 
+# 	#-o $METH_OUTPUT_DIR --comprehensive --merge_non_CpG 
+# 	#--cutoff 1 --buffer_size 40G --zero_based --cytosine_report --genome_folder $GENOME_PATH $bam_file
+# 
+#    #########
+#    #sort bam
+#    #########
+#    my $sortedBAMOutputDir = "$outputDir/samples/$sampleID/sorted";
+#    $inputBAMFile = "$outputDir/samples/$sampleID/dedup/$sampleID.name_sorted.deduplicated.bam";  
+#    my $outputBAMFile = "$sortedBAMOutputDir/$sampleID.bam";  
+#    $tgt = "$sortedBAMOutputDir/sorted.OK";
+#    $dep = "$outputDir/samples/$sampleID/dedup/dedup.OK";
+#    $log = "$sortedBAMOutputDir/sorted.log";
+#    $err = "$sortedBAMOutputDir/sorted.err";
+#    @cmd = ("$samtools sort $inputBAMFile -o $outputBAMFile");
+#    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);
 
     ############################
     #combine trimmed fastq files

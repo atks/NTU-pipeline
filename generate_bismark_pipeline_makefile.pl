@@ -68,7 +68,7 @@ if(!GetOptions ('h'=>\$help,
     }
 }
 
-$makeFile = "$outputDir/run_pipeline.mk";
+$makeFile = "$outputDir/$makeFile";
 
 #programs
 my $bismark_genome_preparation = "/home/users/ntu/adrianta/programs/bismark-0.19.0/bismark_genome_preparation";
@@ -92,9 +92,6 @@ printf("         sample file          %s\n", $sampleFile);
 printf("         reference            %s\n", $refGenomeDir);
 printf("\n");
 
-#this pipeline generator generates 2 makefiles
-my $preprocessMakeFile = 0;
-
 ################################################
 #Helper data structures for generating make file
 ################################################
@@ -115,7 +112,7 @@ my $outputVCFFile;
 #not handled by this pipeline, partly because I wanted a specific path 
 #for it to be in which cannot be specified on the command line.  
 #/home/users/ntu/adrianta/ref/hg19/Bisulfite_Genome
-#$BISMARK_PATH/bismark_genome_preparation --path_to_bowtie $BOWTIE_PATH --verbose $GENOME_PATH
+#bismark_genome_preparation --path_to_bowtie $bowtie2Path --verbose $refGGenomeDir
 
 #################
 #Read sample file 
@@ -248,6 +245,9 @@ for my $sampleID (@SAMPLE)
     my $splitTrimmedAlignedBAMFiles = "";
     for my $i (1 .. $noFile)
     {
+        ##############
+        #trimmed reads
+        ##############
         my $splitDir = "$outputDir/samples/$sampleID/split";
         my $trimGaloreOutputDir = "$outputDir/samples/$sampleID/trim_galore_output/$i";
         mkpath("$trimGaloreOutputDir");
@@ -261,9 +261,6 @@ for my $sampleID (@SAMPLE)
         my $trimmedR1File = "$trimGaloreOutputDir/$i" . "_$file1" . "_val_1.fq.gz";
         my $trimmedR2File = "$trimGaloreOutputDir/$i" . "_$file2" . "_val_2.fq.gz";
         
-        ##############
-        #trimmed reads
-        ##############
         $splitTrimmedR1FASTQFiles .= $i==0 ? "$trimmedR1File" : " $trimmedR1File";
         $splitTrimmedR2FASTQFiles .= $i==0 ? "$trimmedR2File" : " $trimmedR2File";
         $dep = "$splitDir/split.OK";

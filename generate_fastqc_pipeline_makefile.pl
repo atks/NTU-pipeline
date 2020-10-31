@@ -236,6 +236,30 @@ for my $sampleID (@SAMPLE)
     ###########
     my $noFile = ceil($SAMPLE{$sampleID}{NO_LINES}/$splitLineNo);
     
+#    my $directories = `ls -l $outputDir/samples/$sampleID/trim_galore_output/ | grep "^d" | tr -s ' ' '\t' | cut -f9`;
+#    
+#    my @directories = split("\n", $directories);
+#    
+#    for my $dir (@directories)
+#    {
+#        
+#        if ($dir > $noFile)
+#        {
+#            my $subdirectories = `ls $outputDir/samples/$sampleID/trim_galore_output/$dir`;
+#            if ($subdirectories eq "")
+#            {
+#                rmtree("$outputDir/samples/$sampleID/trim_galore_output/$dir");
+# 
+#                print "$noFile : deleting $outputDir/samples/$sampleID/trim_galore_output/$dir\n";
+#            }
+#    
+#        }
+#        else
+#        {
+#            print "keep $dir \n";
+#        }
+#    }
+    
     print "$sampleID \t no files = $noFile\n";
     my $splitTrimmedOKFiles = "";
     my $splitTrimmedR1FASTQFiles = "";
@@ -243,6 +267,9 @@ for my $sampleID (@SAMPLE)
    
     my $splitTrimmedAlignedOKFiles = "";
     my $splitTrimmedAlignedBAMFiles = "";
+    
+#    next;
+    
     for my $i (1 .. $noFile)
     {
         ##############
@@ -470,6 +497,7 @@ sub makePBSStep
     my $cmd = join(";", @cmd);
     $cmd = "set -o pipefail;" . join(";", @cmd);
     $cmd = "\techo \"$cmd\" | qsub -q normal -P 12000713 -W block=true -o $log -e $err -l select=1:ncpus=$ncpu:mem=$mem,walltime=$walltime\n";
+    $cmd .= "\tsleep 60\n";
     $cmd .= "\ttouch $tgt\n";
     push(@cmds, $cmd);
 }

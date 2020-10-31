@@ -109,13 +109,13 @@ my $outputVCFFile;
 #################
 #Bisulfite Genome
 #################
-#not handled by this pipeline, partly because I wanted a specific path 
-#for it to be in which cannot be specified on the command line.  
+#not handled by this pipeline, partly because I wanted a specific path
+#for it to be in which cannot be specified on the command line.
 #/home/users/ntu/adrianta/ref/hg19/Bisulfite_Genome
 #bismark_genome_preparation --path_to_bowtie $bowtie2Path --verbose $refGGenomeDir
 
 #################
-#Read sample file 
+#Read sample file
 #################
 my %SAMPLE = ();
 my @SAMPLE = ();
@@ -126,15 +126,15 @@ while (<SA>)
     if(!/^#/)
     {
         my ($sampleID, $fastq1Path, $fastq2Path) = split(/\s+/, $_);
-        
+
         if (exists($SAMPLE{$sampleID}))
         {
             exit("$sampleID already exists. Please fix.");
         }
-        
+
         $SAMPLE{$sampleID}{FASTQ1} = $fastq1Path;
         $SAMPLE{$sampleID}{FASTQ2} = $fastq2Path;
-        
+
         push(@SAMPLE, $sampleID);
     }
 }
@@ -148,12 +148,12 @@ for my $sampleID (@SAMPLE)
     mkpath("$outputDir/samples/$sampleID");
     mkpath("$outputDir/samples/$sampleID/split");
     mkpath("$outputDir/samples/$sampleID/fastqc_output");
-    mkpath("$outputDir/samples/$sampleID/trim_galore_output");    
+    mkpath("$outputDir/samples/$sampleID/trim_galore_output");
     mkpath("$outputDir/samples/$sampleID/trimmed_fastqc_output");
-    mkpath("$outputDir/samples/$sampleID/aligned");   
-    mkpath("$outputDir/samples/$sampleID/dedup");   
-    mkpath("$outputDir/samples/$sampleID/methylation");   
-    mkpath("$outputDir/samples/$sampleID/sorted");   
+    mkpath("$outputDir/samples/$sampleID/aligned");
+    mkpath("$outputDir/samples/$sampleID/dedup");
+    mkpath("$outputDir/samples/$sampleID/methylation");
+    mkpath("$outputDir/samples/$sampleID/sorted");
 }
 
 #####################
@@ -179,7 +179,7 @@ for my $sampleID (@SAMPLE)
     if (!exists($SAMPLE{$sampleID}{NO_LINES}))
     {
         push(@SAMPLES_TO_COUNTLINES, $sampleID);
-    }    
+    }
 }
 
 my $noFilesToBeCounted = scalar(@SAMPLES_TO_COUNTLINES);
@@ -190,7 +190,7 @@ print "$noFilesToBeCounted" . "/" . scalar(@SAMPLE) . " samples to have their FA
 ############################
 my $noLinesOKFiles = "";
 if ($noFilesToBeCounted)
-{ 
+{
     for my $sampleID (@SAMPLES_TO_COUNTLINES)
     {
         my $sampleDir = "$outputDir/samples/$sampleID";
@@ -204,7 +204,7 @@ if ($noFilesToBeCounted)
         @cmd = ("$zsplit -s $sampleID -o $outputDir -l $splitLineNo -c $outputFile $SAMPLE{$sampleID}{FASTQ1} $SAMPLE{$sampleID}{FASTQ2}");
         makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);
     }
-    
+
     $makeFile = "$outputDir/count_lines.mk";
     print "Please run \"make -f count_lines.mk -j 8 -k\n";
     goto GENERATE_MAKEFILE;
@@ -230,17 +230,17 @@ for my $sampleID (@SAMPLE)
     $err = "$fastqcOutputDir/fastqc2.err";
     @cmd = ("$fastqc $SAMPLE{$sampleID}{FASTQ2} -o $fastqcOutputDir");
     makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);
-    
+
     ###########
     #trimgalore
     ###########
     my $noFile = ceil($SAMPLE{$sampleID}{NO_LINES}/$splitLineNo);
-    
+
     print "$sampleID \t no files = $noFile\n";
     my $splitTrimmedOKFiles = "";
     my $splitTrimmedR1FASTQFiles = "";
     my $splitTrimmedR2FASTQFiles = "";
-   
+
     my $splitTrimmedAlignedOKFiles = "";
     my $splitTrimmedAlignedBAMFiles = "";
     for my $i (1 .. $noFile)
@@ -257,10 +257,10 @@ for my $sampleID (@SAMPLE)
         my ($file2, $dir2, $suffix2) = fileparse($SAMPLE{$sampleID}{FASTQ2}, (".fastq.gz"));
         my $R1File = "$splitDir/$i" . "_$file1$suffix1";
         my $R2File = "$splitDir/$i" . "_$file2$suffix2";
-        
+
         my $trimmedR1File = "$trimGaloreOutputDir/$i" . "_$file1" . "_val_1.fq.gz";
         my $trimmedR2File = "$trimGaloreOutputDir/$i" . "_$file2" . "_val_2.fq.gz";
-        
+
         $splitTrimmedR1FASTQFiles .= $i==0 ? "$trimmedR1File" : " $trimmedR1File";
         $splitTrimmedR2FASTQFiles .= $i==0 ? "$trimmedR2File" : " $trimmedR2File";
         $dep = "$splitDir/split.OK";
@@ -268,10 +268,11 @@ for my $sampleID (@SAMPLE)
         $err = "$trimGaloreOutputDir/trim_galore.err";
         @cmd = ("$trimGalore -o $trimGaloreOutputDir " .
                             "--path_to_cutadapt $cutAdapt " .
-                            "--keep --illumina --clip_R2 18 --three_prime_clip_R1 18 --phred33 " .
+                            "--dont_gzip --keep --illumina --clip_R2 18 --three_prime_clip_R1 18 --phred33 " .
+#                            "--keep --illumina --clip_R2 18 --three_prime_clip_R1 18 --phred33 " .
                             "--paired $R1File $R2File");
         makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);
-        
+
         ####################
         #align trimmed reads
         ####################
@@ -279,36 +280,43 @@ for my $sampleID (@SAMPLE)
         my $tempAlignedOutputDir = "$alignedOutputDir/temp";
         $tgt = "$alignedOutputDir/aligned.OK";
         $splitTrimmedAlignedOKFiles .= $i==0 ? "$alignedOutputDir/aligned.OK" : " $alignedOutputDir/aligned.OK";
-        
+
         my ($file, $dir, $suffix) = fileparse($trimmedR1File, (".fq.gz"));
         my $bamFile = $alignedOutputDir . "/" . $file . "_bismark_bt2_pe.bam";
-        
+
 #        print "BAM: $bamFile  \n";
 #        13_JC1_Macr_Nova_Swiftbio_indexed_R1_val_1_bismark_bt2_pe.bam
 #        /home/users/ntu/adrianta/12000713/20200807_wgbs_pilot/samples/JC1/trim_galore_output/13/
 #        13_JC1_Macr_Nova_Swiftbio_indexed_R1_val_1.fq.gz
         $splitTrimmedAlignedBAMFiles .= $i==0 ? "$bamFile" : " $bamFile";
-   
+
         $dep = "$trimGaloreOutputDir/trim_galore.OK";
         $log = "$alignedOutputDir/aligned.log";
         $err = "$alignedOutputDir/aligned.err";
-        @cmd = ("$bismark --bowtie2 -p 4 --bam " . 
-                    "--temp_dir $tempAlignedOutputDir --un --ambiguous " . 
+#        @cmd = ("$bismark --bowtie2 -p 4 --bam " .
+#                    "--temp_dir $tempAlignedOutputDir " .
+#                    "--score_min L,0,-0.2 " .
+#                    "--path_to_bowtie $bowtie2Path " .
+#                    "-o $alignedOutputDir " .
+#                    "--genome_folder $refGenomeDir " .
+#                    "-1 $trimmedR1File -2 $trimmedR2File");
+        @cmd = ("$bismark --bowtie2 -p 4 --bam " .
+                    "--temp_dir $tempAlignedOutputDir --un --ambiguous " .
                     "--score_min L,0,-0.2 " .
                     "--path_to_bowtie $bowtie2Path " .
-                    "-o $alignedOutputDir " . 
+                    "-o $alignedOutputDir " .
                     "--genome_folder $refGenomeDir " .
                     "-1 $trimmedR1File -2 $trimmedR2File");
-        makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);    
-        
-        
+        makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 8, "32G", @cmd);
+
+
     }
 
     ######################
     #combined aligned bams
     ######################
     my $alignedOutputDir = "$outputDir/samples/$sampleID/aligned";
-    my $outputBamFile = "$alignedOutputDir/$sampleID.name_sorted.bam";  
+    my $outputBamFile = "$alignedOutputDir/$sampleID.name_sorted.bam";
     $tgt = "$outputBamFile.OK";
     $dep = $splitTrimmedAlignedOKFiles;
     $log = "$alignedOutputDir/merge_name_sorted.log";
@@ -320,54 +328,63 @@ for my $sampleID (@SAMPLE)
     #deduplicate
     ############
     my $dedupOutputDir = "$outputDir/samples/$sampleID/dedup";
-    my $inputBAMFile = "$outputDir/samples/$sampleID/aligned/$sampleID.name_sorted.bam";  
+    my $inputBAMFile = "$outputDir/samples/$sampleID/aligned/$sampleID.name_sorted.bam";
     $tgt = "$dedupOutputDir/dedup.OK";
     $dep = "$inputBAMFile.OK";
     $log = "$dedupOutputDir/dedup.log";
     $err = "$dedupOutputDir/dedup.err";
     @cmd = ("$bismarkPath/deduplicate_bismark -p --bam $inputBAMFile --output_dir $dedupOutputDir");
-    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);
-     
+    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "12:00:00", 24, "96G", @cmd);
+
+
+#    ### Run the deduplication, and remove the pcr duplicates from unsorted_bam_files (i.e the sequence aligning to the same genomic positions).
+#    $BISMARK_PATH/deduplicate_bismark -p --bam $UNSORTED_BAM_DIR/${LIB}_unsorted_merged.bam --output_dir $UNSORTED_BAM_DIR
+
+
     ####################
     #extract methylation
-    ####################    
+    ####################
     my $methylationOutputDir = "$outputDir/samples/$sampleID/methylation";
-    $inputBAMFile = "$outputDir/samples/$sampleID/dedup/$sampleID.name_sorted.deduplicated.bam";  
+    $inputBAMFile = "$outputDir/samples/$sampleID/dedup/$sampleID.name_sorted.deduplicated.bam";
     $tgt = "$methylationOutputDir/methylation.OK";
     $dep = "$outputDir/samples/$sampleID/dedup/dedup.OK";
     $log = "$methylationOutputDir/methylation.log";
     $err = "$methylationOutputDir/methylation.err";
     @cmd = ("$bismarkPath/bismark_methylation_extractor " .
-             "-p --multicore 4 --no_overlap " . 
-             "-o $methylationOutputDir " . 
-             "--comprehensive --merge_non_CpG " . 
+             "-p --multicore 4 --no_overlap " .
+             "-o $methylationOutputDir " .
+             "--comprehensive --merge_non_CpG " .
              "--cutoff 1 --buffer_size 40G --zero_based --cytosine_report " .
              "--genome_folder $refGenomeDir " .
              "$inputBAMFile");
-    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 4, "96G", @cmd);
- 	#$BISMARK_PATH/bismark_methylation_extractor 
- 	#-p --multicore 4 --no_overlap 
- 	#-o $METH_OUTPUT_DIR --comprehensive --merge_non_CpG 
+    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "48:00:00", 24, "96G", @cmd);
+
+
+
+
+ 	#$BISMARK_PATH/bismark_methylation_extractor
+ 	#-p --multicore 4 --no_overlap
+ 	#-o $METH_OUTPUT_DIR --comprehensive --merge_non_CpG
  	#--cutoff 1 --buffer_size 40G --zero_based --cytosine_report --genome_folder $GENOME_PATH $bam_file
- 
+
     #########
     #sort bam
     #########
     my $sortedBAMOutputDir = "$outputDir/samples/$sampleID/sorted";
-    $inputBAMFile = "$outputDir/samples/$sampleID/dedup/$sampleID.name_sorted.deduplicated.bam";  
-    my $outputBAMFile = "$sortedBAMOutputDir/$sampleID.bam";  
+    $inputBAMFile = "$outputDir/samples/$sampleID/dedup/$sampleID.name_sorted.deduplicated.bam";
+    my $outputBAMFile = "$sortedBAMOutputDir/$sampleID.bam";
     $tgt = "$sortedBAMOutputDir/sorted.OK";
     $dep = "$outputDir/samples/$sampleID/dedup/dedup.OK";
     $log = "$sortedBAMOutputDir/sorted.log";
     $err = "$sortedBAMOutputDir/sorted.err";
     @cmd = ("$samtools sort $inputBAMFile -o $outputBAMFile");
-    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);
+    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 12, "48G", @cmd);
 
     ############################
     #combine trimmed fastq files
     ############################
     my $trimGaloreOutputDir = "$outputDir/samples/$sampleID/trim_galore_output";
-    
+
     my $trimmedR1File = "$trimGaloreOutputDir/trimmed_$sampleID" . "_1.fastq.gz";
     $tgt = "$trimmedR1File.OK";
     $dep = "$splitTrimmedOKFiles";
@@ -375,7 +392,7 @@ for my $sampleID (@SAMPLE)
     $err = "$trimGaloreOutputDir/zcat.err";
     @cmd = ("zcat $splitTrimmedR1FASTQFiles | gzip -c > $trimmedR1File");
     makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);
-    
+
     my $trimmedR2File = "$trimGaloreOutputDir/trimmed_$sampleID" . "_2.fastq.gz";
     $tgt = "$trimmedR2File.OK";
     $dep = "$splitTrimmedOKFiles";
@@ -383,7 +400,7 @@ for my $sampleID (@SAMPLE)
     $err = "$trimGaloreOutputDir/zcat.err";
     @cmd = ("zcat $splitTrimmedR2FASTQFiles | gzip -c > $trimmedR2File");
     makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);
-        
+
     #####################
     #fastQC trimmed files
     #####################
@@ -399,7 +416,7 @@ for my $sampleID (@SAMPLE)
     $log = "$fastqcOutputDir/fastqc2.log";
     $err = "$fastqcOutputDir/fastqc2.err";
     @cmd = ("$fastqc $trimmedR2File -o $fastqcOutputDir");
-    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);    
+    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);
 }
 
 #*******************
@@ -446,14 +463,14 @@ sub makeJob
     }
     elsif ($method eq "namedPBS")
     {
-        
-        my ($name, $tgt, $dep, @rest) = @others;  
-        
+
+        my ($name, $tgt, $dep, @rest) = @others;
+
 #        print "\t name: $name \n";
 #        print "\t tgt: $tgt \n";
 #        print "\t dep: $dep \n";
 #        print "\t \@rest: @rest \n";
-              
+
         makeNamedPBSStep($name, $tgt, $dep, @rest);
     }
     else
@@ -485,14 +502,14 @@ sub makeNamedPBSStep
 #    print "\t\t err: $err \n";
 #    print "\t\t wt : $walltime \n";
 #    print "\t\t \@cmd: @cmd \n";
-        
+
     push(@tgts, $tgt);
     push(@deps, $dep);
     my $cmd = join(";", @cmd);
     $cmd = "set -o pipefail;" . join(";", @cmd);
     $cmd = "\techo \"$cmd\" | qsub -q normal -P 12000713 -W block=true -N $name -o $log -e $err -l select=1:ncpus=$ncpu:mem=$mem,walltime=$walltime\n";
     $cmd .= "\ttouch $tgt\n";
-    
+
     push(@cmds, $cmd);
 }
 

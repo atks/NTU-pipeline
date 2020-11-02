@@ -268,8 +268,7 @@ for my $sampleID (@SAMPLE)
         $err = "$trimGaloreOutputDir/trim_galore.err";
         @cmd = ("$trimGalore -o $trimGaloreOutputDir " .
                             "--path_to_cutadapt $cutAdapt " .
-                            "--dont_gzip --keep --illumina --clip_R2 18 --three_prime_clip_R1 18 --phred33 " .
-#                            "--keep --illumina --clip_R2 18 --three_prime_clip_R1 18 --phred33 " .
+                            "--keep --illumina --clip_R2 18 --three_prime_clip_R1 18 --phred33 " .
                             "--paired $R1File $R2File");
         makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 1, "1G", @cmd);
 
@@ -290,6 +289,9 @@ for my $sampleID (@SAMPLE)
 #        13_JC1_Macr_Nova_Swiftbio_indexed_R1_val_1.fq.gz
         $splitTrimmedAlignedBAMFiles .= $i==0 ? "$bamFile" : " $bamFile";
 
+        mkpath($alignedOutputDir);
+
+
         $dep = "$trimGaloreOutputDir/trim_galore.OK";
         $log = "$alignedOutputDir/aligned.log";
         $err = "$alignedOutputDir/aligned.err";
@@ -301,15 +303,14 @@ for my $sampleID (@SAMPLE)
 #                    "--genome_folder $refGenomeDir " .
 #                    "-1 $trimmedR1File -2 $trimmedR2File");
         @cmd = ("$bismark --bowtie2 -p 4 --bam " .
-                    "--temp_dir $tempAlignedOutputDir --un --ambiguous " .
+                    "--temp_dir $tempAlignedOutputDir --un --ambiguous --ambig_bam " .
+                    "--rg_tag --rg_id $sampleID --rg_sample $sampleID " .
                     "--score_min L,0,-0.2 " .
                     "--path_to_bowtie $bowtie2Path " .
                     "-o $alignedOutputDir " .
                     "--genome_folder $refGenomeDir " .
                     "-1 $trimmedR1File -2 $trimmedR2File");
         makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 8, "32G", @cmd);
-
-
     }
 
     ######################
@@ -334,7 +335,7 @@ for my $sampleID (@SAMPLE)
     $log = "$dedupOutputDir/dedup.log";
     $err = "$dedupOutputDir/dedup.err";
     @cmd = ("$bismarkPath/deduplicate_bismark -p --bam $inputBAMFile --output_dir $dedupOutputDir");
-    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "12:00:00", 24, "96G", @cmd);
+    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 24, "96G", @cmd);
 
 
 #    ### Run the deduplication, and remove the pcr duplicates from unsorted_bam_files (i.e the sequence aligning to the same genomic positions).
@@ -378,7 +379,7 @@ for my $sampleID (@SAMPLE)
     $log = "$sortedBAMOutputDir/sorted.log";
     $err = "$sortedBAMOutputDir/sorted.err";
     @cmd = ("$samtools sort $inputBAMFile -o $outputBAMFile");
-    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 12, "48G", @cmd);
+    makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "48:00:00", 12, "48G", @cmd);
 
     ############################
     #combine trimmed fastq files

@@ -282,16 +282,8 @@ for my $sampleID (@SAMPLE)
 
         my ($file, $dir, $suffix) = fileparse($trimmedR1File, (".fq.gz"));
         my $bamFile = $alignedOutputDir . "/" . $file . "_bismark_bt2_pe.bam";
-
-#        print "BAM: $bamFile  \n";
-#        13_JC1_Macr_Nova_Swiftbio_indexed_R1_val_1_bismark_bt2_pe.bam
-#        /home/users/ntu/adrianta/12000713/20200807_wgbs_pilot/samples/JC1/trim_galore_output/13/
-#        13_JC1_Macr_Nova_Swiftbio_indexed_R1_val_1.fq.gz
         $splitTrimmedAlignedBAMFiles .= $i==0 ? "$bamFile" : " $bamFile";
-
         mkpath($alignedOutputDir);
-
-
         $dep = "$trimGaloreOutputDir/trim_galore.OK";
         $log = "$alignedOutputDir/aligned.log";
         $err = "$alignedOutputDir/aligned.err";
@@ -337,11 +329,6 @@ for my $sampleID (@SAMPLE)
     @cmd = ("$bismarkPath/deduplicate_bismark -p --bam $inputBAMFile --output_dir $dedupOutputDir");
     makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "24:00:00", 24, "96G", @cmd);
 
-
-#    ### Run the deduplication, and remove the pcr duplicates from unsorted_bam_files (i.e the sequence aligning to the same genomic positions).
-#    $BISMARK_PATH/deduplicate_bismark -p --bam $UNSORTED_BAM_DIR/${LIB}_unsorted_merged.bam --output_dir $UNSORTED_BAM_DIR
-
-
     ####################
     #extract methylation
     ####################
@@ -359,14 +346,6 @@ for my $sampleID (@SAMPLE)
              "--genome_folder $refGenomeDir " .
              "$inputBAMFile");
     makeJob("namedPBS", $pipelineName, $tgt, $dep, $log, $err, "48:00:00", 24, "96G", @cmd);
-
-
-
-
- 	#$BISMARK_PATH/bismark_methylation_extractor
- 	#-p --multicore 4 --no_overlap
- 	#-o $METH_OUTPUT_DIR --comprehensive --merge_non_CpG
- 	#--cutoff 1 --buffer_size 40G --zero_based --cytosine_report --genome_folder $GENOME_PATH $bam_file
 
     #########
     #sort bam
